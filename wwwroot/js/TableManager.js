@@ -89,16 +89,15 @@ export class ArraySpan {
 /** @template {T} */
 class ArraySpanEnumerator {
     #source
-    #current
-    done
-    value
+    #current = 0
+    done = true
+    value = undefined
 
     /**
      * @param {ArraySpan<T>} arraySpan
      */
     constructor(arraySpan) {
         this.#source = arraySpan
-        this.#current = 0
     }
 
     next() {
