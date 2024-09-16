@@ -80,6 +80,38 @@ export class ArraySpan {
         values.push(value)
         this.count += 1
     }
+
+    [Symbol.iterator]() {
+        return new ArraySpanEnumerator(this)
+    }
+}
+
+/** @template {T} */
+class ArraySpanEnumerator {
+    #source
+    #current
+    done
+    value
+
+    /**
+     * @param {ArraySpan<T>} arraySpan
+     */
+    constructor(arraySpan) {
+        this.#source = arraySpan
+        this.#current = 0
+    }
+
+    next() {
+        this.value = undefined
+        this.done = this.#current >= this.#source.count
+
+        if (!this.done) {
+            this.value = this.#source.at(this.#current)
+            this.#current += 1
+        }
+
+        return this
+    }
 }
 
 /**
@@ -112,17 +144,6 @@ export class Filter {
 }
 
 export class RegexFilter extends Filter {
-
-    /**
-     * @pure
-     * @param {string|RegExp} template
-     */
-    static #ensureRegExp(template) {
-        return typeof template === 'string'
-            ? new RegExp(template)
-            : template
-    }
-
     #template
     #column
 
@@ -133,7 +154,7 @@ export class RegexFilter extends Filter {
      */
     constructor(template, column, id = null) {
         super(id ?? column)
-        this.#template = RegexFilter.#ensureRegExp(template)
+        this.#template = RegexFilter._ensureRegExp(template)
         this.#column = column
     }
 
@@ -144,12 +165,23 @@ export class RegexFilter extends Filter {
         const cellContent = tableRow[this.#column]
         return this.#template.test(cellContent)
     }
+
+    /**
+     * @pure
+     * @param {string|RegExp} template
+     */
+    static _ensureRegExp(template) {
+        return typeof template === 'string'
+            ? new RegExp(template)
+            : template
+    }
+
 }
 
 export class FiltersSequenceNode {
     #filter
     #id
-    filteredCount
+    #filteredCount
 
     /**
      * @param {Filter} filter
@@ -157,7 +189,7 @@ export class FiltersSequenceNode {
     constructor(filter) {
         this.#filter = filter
         this.#id = filter.id
-        this.filteredCount = -1
+        this.#filteredCount = -1
     }
 
     get id() {
@@ -166,6 +198,10 @@ export class FiltersSequenceNode {
 
     get filter() {
         return this.#filter
+    }
+
+    get filteredCount() {
+        return this.#filteredCount
     }
 }
 
@@ -184,21 +220,49 @@ export class FiltersSequence {
     }
 
     /**
+     * Filters collection
+     * @param {Filter} filter
+     */
+    filter(filter) {
+        if (!filter || !(isMatch in filter && typeof isMatch === 'function' && id in filter && typeof id === 'string')) {
+            return
+        }
+
+        this._ensureNodeFor(filter)
+        this._filterChain(fitler, this._indexOf(filter.id))
+        this.refreshSpan()
+    }
+
+    refilter() {
+        const first = this.#filters[0]
+        if (first) {
+            this.filter(first.filter)
+        }
+    }
+
+    refreshSpan() {
+        const lastFilter = this.#filters[this.#filters.length - 1]
+        if (lastFilter.filteredCount >= 0) {
+            this.#values.count = lastFilter.filteredCount
+        }
+    }
+
+    /**
      * @param {Filter} filter
      * @param {number} filterIndex
      */
-    #filterChain(filter, filterIndex) {
+    _filterChain(filter, filterIndex) {
         const end = filterIndex > 0
             ? this.#filters[filterIndex - 1].filteredCount
             : this.#values.length
 
         const node = this.#filters[filterIndex]
-        node.filteredCount = this.#filter(filter, end)
+        node.filteredCount = this._filter(filter, end)
         node.filter = filter
 
         const nextIndex = filterIndex + 1
         if (nextIndex < this.#filters.length) {
-            this.#filterChain(this.#filters[nextIndex].filter, nextIndex)
+            this._filterChain(this.#filters[nextIndex].filter, nextIndex)
         }
     }
 
@@ -207,7 +271,7 @@ export class FiltersSequence {
      * @param {Filter} filter
      * @param {number} end
      */
-    #filter(filter, end) {
+    _filter(filter, end) {
         let matched = 0
 
         while (matched < end) {
@@ -226,8 +290,8 @@ export class FiltersSequence {
     /**
      * @param {Filter} filter
      */
-    #ensureNodeFor(filter) {
-        const index = this.#indexOf(filter.id)
+    _ensureNodeFor(filter) {
+        const index = this._indexOf(filter.id)
         if (index >= 0) {
             return this.#filters[index]
         }
@@ -241,7 +305,7 @@ export class FiltersSequence {
     /**
      * @param {string} id
      */
-    #indexOf(id) {
+    _indexOf(id) {
         for (let i = 0; i < this.#filters.length; i++) {
             if (id === this.#filters[i].id) {
                 return i
@@ -250,42 +314,11 @@ export class FiltersSequence {
 
         return -1
     }
-
-    /**
-     * Filters collection
-     * @param {Filter} filter
-     */
-    filter(filter) {
-        if (!filter || !(isMatch in filter && typeof isMatch === 'function' && id in filter && typeof id === 'string')) {
-            return
-        }
-
-        this.#ensureNodeFor(filter)
-        this.#filterChain(fitler, this.#indexOf(filter.id))
-        this.refreshSpan()
-    }
-
-    refilter() {
-        const first = this.#filters[0]
-        if (first) {
-            this.filter(first.filter)
-        }
-    }
-
-    refreshSpan() {
-        const lastFilter = this.#filters[this.#filters.length - 1]
-        if (lastFilter.filteredCount >= 0) {
-            this.#values.count = lastFilter.filteredCount
-        }
-    }
 }
 
 export class PaginationElement {
-    hide() {
-    }
-
-    show() {
-    }
+    hide() { }
+    show() { }
 }
 
 export class HTMLPaginationElement extends PaginationElement {
@@ -295,6 +328,7 @@ export class HTMLPaginationElement extends PaginationElement {
      * @param {HTMLElement} element
      */
     constructor(element) {
+        super()
         this.#element = element
     }
 
@@ -311,14 +345,14 @@ export class TableRow extends HTMLPaginationElement {
     #htmlRow
 
     /**
-     * @param {HTMLElement} htmlRow
+     * @param {HTMLTableRowElement} htmlRow
      * @param {{column: string, index: number}} columnsCellMap
      */
     constructor(htmlRow, columnsCellMap) {
         super(htmlRow)
 
         this.#htmlRow = htmlRow
-        if (!(cells in htmlRow)) {
+        if (!htmlRow || !htmlRow.cells) {
             return
         }
 
@@ -337,17 +371,6 @@ export class TableRow extends HTMLPaginationElement {
 }
 
 export class Pagination  {
-
-    /**
-     * @param {number} pageSize
-     * @param {number} totalCount
-     */
-    static #getMaxPage(pageSize, totalCount) {
-        return totalCount > 0 && pageSize > 0
-            ? Math.ceil(totalCount / pageSize)
-            : 0
-    }
-
     #size
     #rows
     #printed
@@ -364,6 +387,7 @@ export class Pagination  {
 
         this.#size = size
         this.#rows = rows
+        this.hideInitial(rows)
 
         /** @type {PaginationElement[]} */
         const printBuffer = []
@@ -379,33 +403,7 @@ export class Pagination  {
     }
 
     get totalPages() {
-        return Pagination.#getMaxPage(this.#size, this.#rows.count)
-    }
-
-    #close() {
-        for (let i = 0; i < this.#printed.length; i++) {
-            this.#printed[i].hide()
-        }
-    }
-
-    #clear() {
-        this.#printed.splice(0)
-    }
-
-    /**
-     * @param {number} page
-     * @param {number} pageSize
-     */
-    #show(page, pageSize) {
-        const elementIndex = (page - 1) * pageSize
-        const end = Math.min(elementIndex + pageSize, this.#rows.count)
-
-        for (let i = 0; i < end; i++) {
-            const row = this.#rows.at(i)
-
-            this.#printed.push(row)
-            row.show()
-        }
+        return Pagination._getMaxPage(this.#size, this.#rows.count)
     }
 
     previous() {
@@ -432,17 +430,62 @@ export class Pagination  {
             return false
         }
 
-        const maxPage = Pagination.#getMaxPage(this.#size, this.#rows.count)
+        const maxPage = Pagination._getMaxPage(this.#size, this.#rows.count)
         if (page > maxPage) {
             return false
         }
 
-        this.#close()
-        this.#clear()
-        this.#show(page)
+        this._close()
+        this._clear()
+        this._show(page, pageSize)
 
         this.#page = page
         return true
+    }
+
+    _close() {
+        for (let i = 0; i < this.#printed.length; i++) {
+            this.#printed[i].hide()
+        }
+    }
+
+    _clear() {
+        this.#printed.splice(0)
+    }
+
+    /**
+     * @param {number} page
+     * @param {number} pageSize
+     */
+    _show(page, pageSize) {
+        const elementIndex = (page - 1) * pageSize
+        const end = Math.min(elementIndex + pageSize, this.#rows.count)
+
+        for (let i = 0; i < end; i++) {
+            const row = this.#rows.at(i)
+
+            this.#printed.push(row)
+            row.show()
+        }
+    }
+
+    /**
+     * @param {ArraySpan<TableRow>} rows
+     */
+    hideInitial(rows) {
+        for (const row of rows) {
+            row.hide()
+        }
+    }
+
+    /**
+     * @param {number} pageSize
+     * @param {number} totalCount
+     */
+    static _getMaxPage(pageSize, totalCount) {
+        return totalCount > 0 && pageSize > 0
+            ? Math.ceil(totalCount / pageSize)
+            : 0
     }
 }
 

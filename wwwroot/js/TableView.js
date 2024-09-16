@@ -1,5 +1,4 @@
-﻿import { ArraySpan } from './TableManager.js'
-import { Pagination } from './TableManager.js'
+﻿import { TableRow, ArraySpan, Pagination } from './TableManager.js'
 
 class PaginationView {
     #pagination
@@ -14,132 +13,6 @@ class PaginationView {
 
     #squashedPagesBeforeActive
     #squashedPagesAfterActive
-    
-    /**
-     * @param {number} activePage
-     * @param {number} pagesCount
-     */
-    #updateLinks(activePage) {
-        const pagesCount = this.totalPages
-
-        const targetPageInvalid = !Number.isInteger(activePage) || activePage < 1 || activePage > pagesCount
-        const currentPageInvalid = !Number.isInteger(this.#activePage) || this.#activePage < 1 || this.#activePage > pagesCount
-
-        if (targetPageInvalid) {
-            if (currentPageInvalid) {
-                this.switchToFirst()
-            }
-
-            return
-        }
-
-        this.#ensureLinks(pagesCount)
-        console.log(this.#links)
-
-        this.#hideAll()
-
-        const first = this.#findLink(1)
-        this.show(first)
-
-        const last = this.#findLink(pagesCount)
-        this.show(last)
-
-        const beforeActiveCount = activePage - this.#visibleLinks - 2
-        if (beforeActiveCount >= 2) {
-            this.show(this.#squashedPagesBeforeActive)
-            first.parentNode.insertBefore(this.#squashedPagesBeforeActive, first.nextSibling)
-        }
-        else if (beforeActiveCount === 1) {
-            this.show(this.#findLink(2))
-        }
-
-        const start = Math.max(1, activePage - this.#visibleLinks)
-        const end = Math.min(pagesCount, activePage + this.#visibleLinks)
-
-        for (let i = start; i <= end; i++) {
-            this.show(this.#findLink(i))
-        }
-
-        const afterActiveCount = pagesCount - activePage - this.#visibleLinks - 2
-        if (afterActiveCount >= 2) {
-            this.show(this.#squashedPagesAfterActive)
-            last.parentNode.insertBefore(this.#squashedPagesAfterActive, last)
-        }
-        else if (afterActiveCount === 1) {
-            this.show(this.#findLink(page - 2))
-        }
-    }
-
-    /**
-     * @param {number} count
-     */
-    #ensureLinks(count) {
-        for (let i = this.#links.length + 1; i <= count; i++) {
-            const link = this.createLink(i)
-            this.#links.push(link)
-        }
-    }
-
-    #hideAll() {
-        this.hide(this.#squashedPagesBeforeActive)
-        this.hide(this.#squashedPagesAfterActive)
-
-        for (let i = 0; i < this.#links.length; i++) {
-            this.hide(this.#links[i])
-        }
-    }
-
-    #unsetActive() {
-        const prevActivePageLink = this.#findLink(this.#activePage)
-        prevActivePageLink?.classList.remove(this.#activeClass)
-    }
-
-    /**
-     * @param {number} link
-     */
-    #setActive(page) {
-        const link = this.#findLink(page)
-        link?.classList.add(this.#activeClass)
-
-        this.#activePage = page
-    }
-
-    /**
-     * @param {number} page
-     * @return {HTMLElement?}
-     */
-    #findLink(page) {
-        return page <= 0 || page > this.#links.length
-            ? null
-            : this.#links[page - 1]
-    }
-
-    /**
-     * @param {Event} event
-     */
-    #onclick(event) {
-        /** @type {HTMLElement} */
-        const link = event.target
-        const page = +link.getAttribute(this.#pageAttribute)
-
-        if (!Number.isInteger(page) || page <= 0 || page > this.totalPages) {
-            return
-        }
-
-        this.switchTo(page)
-    }
-
-    /**
-    * @param {string} content
-    */
-    #createLinkInternal(content) {
-        const link = document.createElement('a')
-        link.style.display = 'none'
-        link.innerHTML = content
-        link.setAttribute(this.#pageAttribute, content)
-
-        return link;
-    };
 
     /**
      * @param {Pagination} pagination
@@ -153,8 +26,8 @@ class PaginationView {
         this.#visibleLinks = visibleLinks
         this.#activeClass = activeClass;
 
-        this.#squashedPagesBeforeActive = this.#createLinkInternal('...')
-        this.#squashedPagesAfterActive = this.#createLinkInternal('...')
+        this.#squashedPagesBeforeActive = this._createLinkInternal('...')
+        this.#squashedPagesAfterActive = this._createLinkInternal('...')
 
         /** @type {HTMLElement[]} */
         const links = []
@@ -217,22 +90,22 @@ class PaginationView {
 
         const newActive = this.#pagination.page
 
-        this.#unsetActive()
+        this._unsetActive()
 
-        this.#updateLinks(page)
+        this._updateLinks(page)
 
-        this.#setActive(newActive)
+        this._setActive(newActive)
     }
 
     /**
      * @param {number} page
      */
     createLink(page) {
-        const link = this.#createLinkInternal(page)
+        const link = this._createLinkInternal(page)
         const self = this
         link.onclick = function (event) {
             console.log(`click on`, event.target)
-            self.#onclick(event)
+            self._onclick(event)
         }
 
         if (typeof this.#onLinkCreate === 'function') {
@@ -241,6 +114,140 @@ class PaginationView {
 
         return link
     }
+
+    /**
+     * @param {number} activePage
+     * @param {number} pagesCount
+     */
+    _updateLinks(activePage) {
+        const pagesCount = this.totalPages
+
+        const targetPageInvalid = !Number.isInteger(activePage) || activePage < 1 || activePage > pagesCount
+        const currentPageInvalid = !Number.isInteger(this.#activePage) || this.#activePage < 1 || this.#activePage > pagesCount
+
+        if (targetPageInvalid) {
+            if (currentPageInvalid) {
+                this.switchToFirst()
+            }
+
+            return
+        }
+
+        this._ensureLinks(pagesCount)
+        console.log(this.#links)
+
+        this._hideAll()
+
+        const first = this._findLink(1)
+        this.show(first)
+
+        this._squashOrShow(1, activePage - this.#visibleLinks, this.#squashedPagesBeforeActive)
+
+        const start = Math.max(1, activePage - this.#visibleLinks)
+        const end = Math.min(pagesCount, activePage + this.#visibleLinks)
+
+        for (let i = start; i <= end; i++) {
+            this.show(this._findLink(i))
+        }
+
+        this._squashOrShow(activePage + this.#visibleLinks, pagesCount, this.#squashedPagesAfterActive)
+
+        const last = this._findLink(pagesCount)
+        this.show(last)
+    }
+
+    /**
+     * @param {number} start
+     * @param {number} end
+     * @param {HTMLElement} squashed
+     */
+    _squashOrShow(start, end, squashed) {
+        const notPresentedCount = end - start - 1
+
+        if (notPresentedCount >= 2) {
+            const startElement = this._findLink(start, end)
+
+            if (startElement) {
+                startElement.parentNode.insertBefore(squashed, startElement.nextSibling)
+                this.show(squashed)
+            }
+        }
+        else if (notPresentedCount === 1) {
+            const singleNotPresented = this._findLink(start + 1)
+            this.show(singleNotPresented)
+        }
+    }
+
+    /**
+     * @param {number} count
+     */
+    _ensureLinks(count) {
+        for (let i = this.#links.length + 1; i <= count; i++) {
+            const link = this.createLink(i)
+            this.#links.push(link)
+        }
+    }
+
+    _hideAll() {
+        this.hide(this.#squashedPagesBeforeActive)
+        this.hide(this.#squashedPagesAfterActive)
+
+        for (let i = 0; i < this.#links.length; i++) {
+            this.hide(this.#links[i])
+        }
+    }
+
+    _unsetActive() {
+        const prevActivePageLink = this._findLink(this.#activePage)
+        prevActivePageLink?.classList.remove(this.#activeClass)
+    }
+
+    /**
+     * @param {number} link
+     */
+    _setActive(page) {
+        const link = this._findLink(page)
+        link?.classList.add(this.#activeClass)
+
+        this.#activePage = page
+    }
+
+    /**
+     * @param {number} page
+     * @return {HTMLElement?}
+     */
+    _findLink(page) {
+        return page <= 0 || page > this.#links.length
+            ? null
+            : this.#links[page - 1]
+    }
+
+    /**
+     * @param {Event} event
+     */
+    _onclick(event) {
+        /** @type {HTMLElement} */
+        const link = event.target
+        const page = +link.getAttribute(this.#pageAttribute)
+
+        if (!Number.isInteger(page) || page <= 0 || page > this.totalPages) {
+            return
+        }
+
+        this.switchTo(page)
+    }
+
+    /**
+    * @param {string} content
+    */
+    _createLinkInternal(content) {
+        const link = document.createElement('a')
+        link.style.display = 'none'
+        link.innerHTML = content
+        link.setAttribute(this.#pageAttribute, content)
+
+        return link;
+    };
 }
 
 const nextPageBtn = document.getElementById('next_page_btn');
@@ -249,7 +256,7 @@ const nextPageBtn = document.getElementById('next_page_btn');
 const table = document.getElementById('table')
 console.log(table)
 
-const rows = Array.from(table.rows)
+const rows = Array.from(table.rows).map(x => new TableRow(x))
 console.log(rows)
 
 const arrSpan = new ArraySpan(rows)
